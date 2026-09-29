@@ -1,0 +1,122 @@
+name: Génération APK F-Asso-M
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Récupération du code source
+        uses: actions/checkout@v4
+
+      - name: Libérer de l'espace disque sur le serveur
+        run: |
+          echo "==> Espace disque avant nettoyage :"
+          df -h /
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force || true
+          sudo apt-get clean
+          echo "==> Espace disque après nettoyage :"
+          df -h /
+
+      - name: Configuration de Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Configuration de Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configuration de Flutter 3.24.5
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          cache: true
+
+      - name: Dépendances système Linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libjpeg-dev \
+            zlib1g-dev \
+            libfreetype6-dev \
+            liblcms2-dev \
+            libwebp-dev \
+            libgtk-3-dev \
+            ninja-build
+
+      - name: Acceptation des licences Android SDK
+        run: |
+          flutter config --no-analytics
+          yes | flutter doctor --android-licenses || true
+
+      - name: Intégration de FPDF2, ReportLab et Simulation PIL
+        run: |
+          python -m pip install --upgrade "pip<24" "setuptools<70" wheel
+          echo "flet==0.24.1" > requirements.txt
+          echo "requests" >> requirements.txt
+          pip install -r requirements.txt
+          pip install .
+          
+          # 1. Télécharge fpdf2 et reportlab en Python pur (sans forcer Pillow)
+          pip install fpdf2 --target . --no-deps
+          pip install reportlab --target . --no-deps
+
+          # 2. Crée un stub PIL virtuel pour feinter fpdf2 et reportlab
+          mkdir -p PIL
+          cat << 'EOF' > PIL/__init__.py
+          from . import Image
+          EOF
+          
+          cat << 'EOF' > PIL/Image.py
+          class Image:
+              @staticmethod
+              def open(fp, mode='r'):
+                  return Image()
+              def resize(self, size, *args, **kwargs):
+                  return self
+              def convert(self, *args, **kwargs):
+                  return self
+          EOF
+
+      - name: Compilation de l'APK Flet
+        env:
+          CI: "true"
+          FLUTTER_SUPPRESS_ANALYTICS: "true"
+          PUB_DISABLE_ANALYTICS: "true"
+          PIP_VERBOSE: "1"
+        run: |
+          flet build apk --verbose
+
+      - name: Obtenir le lien de téléchargement direct de l'APK
+        if: success()
+        run: |
+          APK_FILE=$(find build/apk -name "*.apk" | head -n 1)
+          echo "=========================================================="
+          echo " FICHIER APK DÉTECTÉ : $APK_FILE"
+          echo "=========================================================="
+          echo ""
+          echo "--> LIEN 1 (TmpFiles - Téléchargement direct) :"
+          curl -s -F "file=@$APK_FILE" https://tmpfiles.org/api/v1/upload | python3 -c "import sys, json; res=json.load(sys.stdin); print(res['data']['url'].replace('tmpfiles.org/', 'tmpfiles.org/dl/'))" || true
+          echo ""
+          echo "--> LIEN 2 (Litterbox - Valide 24h) :"
+          curl -s -F "reqtype=fileupload" -F "time=24h" -F "fileToUpload=@$APK_FILE" https://litterbox.catbox.moe/resources/internals/api.php || true
+          echo ""
+          echo ""
+          echo "--> LIEN 3 (File.io) :"
+          curl -s -F "file=@$APK_FILE" https://file.io | python3 -c "import sys, json; print(json.load(sys.stdin).get('link', 'Erreur'))" || true
+          echo ""
+          echo "=========================================================="
