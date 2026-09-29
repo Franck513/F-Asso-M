@@ -1,0 +1,22 @@
+name: F-Asso-M
+description: "Application F-Asso-M"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies: {}
+
+dependency_overrides:
+  wakelock_plus: 1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: "^2.4.4"
+
+flutter:
+  uses-material-design: true

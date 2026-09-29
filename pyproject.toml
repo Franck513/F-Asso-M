@@ -1,0 +1,22 @@
+[project]
+name = "F-Asso-M"
+version = "1.0.0"
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+    "flet==0.24.1",
+    "Pillow==10.4.0",
+    "fpdf2==2.8.2",
+    "requests==2.32.3",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.flet]
+main_script = "main.py"
+
+[tool.flet.android]
+compile_sdk_version = 34
+target_sdk_version = 34
+min_sdk_version = 21
