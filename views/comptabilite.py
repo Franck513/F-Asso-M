@@ -89,6 +89,12 @@ class ComptabiliteView(ft.Container):
         self.app.page.overlay.append(self.file_picker)
 
         # --- COMPOSANTS DU FORMULAIRE DE SAISIE ---
+        self.input_date = ft.TextField(
+            label="Date",
+            value=datetime.now().strftime("%d/%m/%Y"),
+            hint_text="JJ/MM/AAAA",
+            width=130
+        )
         self.input_libelle = ft.TextField(
             label="Libellé / Description", 
             expand=True, 
@@ -221,8 +227,9 @@ class ComptabiliteView(ft.Container):
                                 ft.Text("Nouvelle Écriture Manuelle", size=15, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_200),
                                 ft.Divider(color=ft.colors.GREY_800),
                                 ft.ResponsiveRow([
-                                    ft.Container(self.input_libelle, col={"sm": 12, "md": 8}),
-                                    ft.Container(self.input_montant, col={"sm": 12, "md": 4}),
+                                    ft.Container(self.input_date, col={"sm": 12, "md": 3}),
+                                    ft.Container(self.input_libelle, col={"sm": 12, "md": 6}),
+                                    ft.Container(self.input_montant, col={"sm": 12, "md": 3}),
                                 ]),
                                 ft.ResponsiveRow([
                                     ft.Container(self.dropdown_type, col={"sm": 12, "md": 3}),
@@ -444,8 +451,10 @@ class ComptabiliteView(ft.Container):
             self.show_snack("Le montant saisi est incorrect.", is_error=True)
             return
 
+        date_operation = self.input_date.value.strip() if self.input_date.value else datetime.now().strftime("%d/%m/%Y")
+
         nouvelle_ligne = {
-            "date": datetime.now().strftime("%d/%m/%Y"),
+            "date": date_operation,
             "libelle": self.input_libelle.value,
             "categorie": self.dropdown_cat.value,
             "sous_categorie": self.dropdown_subcat.value,
@@ -460,6 +469,7 @@ class ComptabiliteView(ft.Container):
         self.app.save_data()
 
         # Reset des champs
+        self.input_date.value = datetime.now().strftime("%d/%m/%Y")
         self.input_libelle.value = ""
         self.input_montant.value = ""
         self.input_cheque.value = ""
@@ -603,6 +613,7 @@ class ComptabiliteView(ft.Container):
                 ft.dropdown.Option("Encaissé / Validé"),
                 ft.dropdown.Option("En attente d'encaissement"),
                 ft.dropdown.Option("Incomplet / Partiel"),
+                ft.dropdown.Option("Rejeté"),
             ],
             value=cotis.get("statut", "Encaissé / Validé")
         )
