@@ -4,6 +4,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 import flet as ft
@@ -50,7 +51,7 @@ class ConfigurationView(ft.Container):
             self.app.current_explorer_path = data_dir_path
 
         self.current_explorer_path = Path(self.app.current_explorer_path)
-        self.explorer_container = ft.Container()  # Conteneur cible pour les mises à jour ciblées
+        self.explorer_container = ft.Container()
 
         # --- APPARENCE & GRAPHISME ---
         page_obj = getattr(self.app, "page", None) or getattr(self, "page", None)
@@ -66,11 +67,11 @@ class ConfigurationView(ft.Container):
             label="Couleur d'accentuation (Thème du Club)",
             options=[
                 ft.dropdown.Option(key="#1E3A8A", text="🔵 Bleu Sport (Défaut)"),
-                ft.dropdown.Option(key="#B91C1C", text="🔴 Rouge Karaté (AKA)"),
+                ft.dropdown.Option(key="#B91C1C", text="🔴 Rouge Dynamique"),
                 ft.dropdown.Option(key="#0369A1", text="Cyan Élite"),
-                ft.dropdown.Option(key="#047857", text="🟢 Vert Dojo"),
-                ft.dropdown.Option(key="#6D28D9", text="🟣 Violet Ceinture Noire"),
-                ft.dropdown.Option(key="#374151", text="⚫ Gris Sombre Martial"),
+                ft.dropdown.Option(key="#047857", text="🟢 Vert Terrain"),
+                ft.dropdown.Option(key="#6D28D9", text="🟣 Violet Performance"),
+                ft.dropdown.Option(key="#374151", text="⚫ Gris Sombre Intense"),
             ],
             value=asso_data.get("accent_color", "#1E3A8A")
         )
@@ -132,12 +133,37 @@ class ConfigurationView(ft.Container):
             on_click=self.sauvegarder_lien_drive
         )
 
-        # --- ÉTAT ET ACTIONS DRIVE API ---
-        has_credentials = Path("credentials.json").exists()
+        # --- ÉTAT ET ACTIONS DRIVE API (CREDENTIALS & TOKEN) ---
+        cred_in_root = Path("credentials.json").exists()
+        cred_in_data = (data_dir_path / "credentials.json").exists()
+        has_credentials = cred_in_root or cred_in_data
+
         self.txt_drive_status = ft.Text(
-            "Fichier credentials.json détecté" if has_credentials else "Fichier credentials.json introuvable à la racine",
+            "Fichier credentials.json détecté" if has_credentials else "Fichier credentials.json introuvable",
             size=12,
             color="#4ADE80" if has_credentials else "red400"
+        )
+
+        self.btn_import_credentials = ft.ElevatedButton(
+            "🔑 Importer credentials.json",
+            icon=get_icon("KEY"),
+            on_click=self.demander_credentials
+        )
+
+        token_in_root = Path("token.json").exists()
+        token_in_data = (data_dir_path / "token.json").exists()
+        has_token = token_in_root or token_in_data
+
+        self.txt_token_status = ft.Text(
+            "Fichier token.json détecté" if has_token else "Fichier token.json introuvable",
+            size=12,
+            color="#4ADE80" if has_token else "red400"
+        )
+
+        self.btn_import_token = ft.ElevatedButton(
+            "🔑 Importer token.json",
+            icon=get_icon("KEY"),
+            on_click=self.demander_token
         )
 
         self.btn_upload_drive = ft.ElevatedButton(
@@ -192,7 +218,7 @@ class ConfigurationView(ft.Container):
                 ]),
                 ft.Divider(color="grey800"),
 
-                # Card 1: Personnalisation Graphique & Éléments Visuels
+                # Card 1: Personnalisation Graphique
                 self.creer_section_card(
                     "Personnalisation Graphique & Visuels de l'Association",
                     ft.Column([
@@ -241,7 +267,14 @@ class ConfigurationView(ft.Container):
                             self.input_drive_link,
                             self.btn_save_drive_link
                         ], spacing=10),
-                        self.txt_drive_status,
+                        ft.Row([
+                            self.txt_drive_status,
+                            self.btn_import_credentials
+                        ], spacing=10, wrap=True),
+                        ft.Row([
+                            self.txt_token_status,
+                            self.btn_import_token
+                        ], spacing=10, wrap=True),
                         ft.Row([
                             self.btn_upload_drive,
                             self.btn_download_drive
@@ -273,7 +306,7 @@ class ConfigurationView(ft.Container):
                 self.creer_section_card(
                     "Informations Système",
                     ft.Column([
-                        ft.Text(" Application Gestion Club Sportif", weight="bold", color="white"),
+                        ft.Text("🏆 Application Gestion Club Multi-Sports", weight="bold", color="white"),
                         ft.Text(f"Saison active chargée : {saison_act}", size=12, color="grey400"),
                         ft.Text(f"Club : {club_nom}", size=12, color="grey400"),
                         ft.Text("Moteur : Hybrid SQLite / JSON + Flet Material Design 3", size=12, color="grey400"),
@@ -294,14 +327,12 @@ class ConfigurationView(ft.Container):
 
     # --- MÉTHODES DE L'EXPLORATEUR INTERACTIF ---
     def _clean_path_name(self, text: str) -> str:
-        """Nettoie une chaîne pour qu'elle soit utilisable comme nom de dossier."""
         if not text:
             return "Club"
         cleaned = re.sub(r'[\\/*?:"<>|]', '_', str(text)).strip()
         return cleaned if cleaned else "Club"
 
     def _get_dossier_export(self) -> Path:
-        """Détermine et crée le dossier d'export : Downloads / NomAsso / Saison /"""
         if sys.platform in ["win32", "darwin"]:
             download_dir = Path.home() / "Downloads"
         else:
@@ -312,7 +343,7 @@ class ConfigurationView(ft.Container):
                 download_dir = Path.home() / "Downloads"
 
         asso_data = getattr(self.app, "association", {})
-        nom_asso = self._clean_path_name(asso_data.get("nom", "Club_Karate"))
+        nom_asso = self._clean_path_name(asso_data.get("nom", "Club_Sportif"))
         saison = self._clean_path_name(getattr(self.app, "saison_active", "Saison_En_Cours"))
 
         target_dir = download_dir / nom_asso / saison
@@ -320,7 +351,6 @@ class ConfigurationView(ft.Container):
         return target_dir
 
     def _get_current_directory_contents(self):
-        """Récupère les dossiers et fichiers du répertoire courant de l'explorateur."""
         dossiers = []
         fichiers = []
         
@@ -339,11 +369,7 @@ class ConfigurationView(ft.Container):
                     item_size = 0
 
                 if item.is_dir():
-                    dossiers.append({
-                        "path": item,
-                        "name": item.name,
-                        "type": "dir"
-                    })
+                    dossiers.append({"path": item, "name": item.name, "type": "dir"})
                 else:
                     fichiers.append({
                         "path": item,
@@ -355,7 +381,6 @@ class ConfigurationView(ft.Container):
         return dossiers, fichiers
 
     def _creer_contenu_explorateur(self):
-        """Génère l'arborescence des fichiers et dossiers pour l'explorateur."""
         base_dir = Path(getattr(self.app, "data_dir", "."))
         dossiers, fichiers = self._get_current_directory_contents()
         
@@ -367,7 +392,6 @@ class ConfigurationView(ft.Container):
 
         lignes_elements = []
 
-        # Bouton pour remonter d'un niveau
         if self.current_explorer_path.resolve() != base_dir.resolve():
             lignes_elements.append(
                 ft.Container(
@@ -384,7 +408,6 @@ class ConfigurationView(ft.Container):
                 )
             )
 
-        # Affichage des sous-dossiers
         for d in dossiers:
             lignes_elements.append(
                 ft.Container(
@@ -403,7 +426,6 @@ class ConfigurationView(ft.Container):
                 )
             )
 
-        # Affichage des fichiers
         for f in fichiers:
             lignes_elements.append(
                 ft.Container(
@@ -442,26 +464,16 @@ class ConfigurationView(ft.Container):
                 border=ft.border.all(1, "grey800")
             ),
             ft.Row([
-                ft.OutlinedButton(
-                    "🏠 Retour Racine",
-                    icon=get_icon("HOME"),
-                    on_click=self.aller_racine
-                ),
-                ft.OutlinedButton(
-                    "🔄 Rafraîchir",
-                    icon=get_icon("REFRESH"),
-                    on_click=self.rafraichir_explorateur_ui
-                )
+                ft.OutlinedButton("🏠 Retour Racine", icon=get_icon("HOME"), on_click=self.aller_racine),
+                ft.OutlinedButton("🔄 Rafraîchir", icon=get_icon("REFRESH"), on_click=self.rafraichir_explorateur_ui)
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
         ], spacing=10)
 
     def construire_explorateur_interne(self):
-        """Initialise le conteneur principal de l'explorateur."""
         self.explorer_container.content = self._creer_contenu_explorateur()
         return self.explorer_container
 
     def mettre_a_jour_affichage_explorateur(self):
-        """Met à jour le contenu du conteneur existant et rafraîchit l'UI localement."""
         if hasattr(self, "explorer_container") and self.explorer_container:
             self.explorer_container.content = self._creer_contenu_explorateur()
             self.explorer_container.update()
@@ -470,19 +482,19 @@ class ConfigurationView(ft.Container):
         nouveau_chemin = e.control.data
         if nouveau_chemin:
             self.current_explorer_path = Path(nouveau_chemin)
-            self.app.current_explorer_path = self.current_explorer_path  # Persistance globale
+            self.app.current_explorer_path = self.current_explorer_path
             self.mettre_a_jour_affichage_explorateur()
 
     def remonter_dossier(self, e):
         base_dir = Path(getattr(self.app, "data_dir", "."))
         if self.current_explorer_path.resolve() != base_dir.resolve():
             self.current_explorer_path = self.current_explorer_path.parent
-            self.app.current_explorer_path = self.current_explorer_path  # Persistance globale
+            self.app.current_explorer_path = self.current_explorer_path
             self.mettre_a_jour_affichage_explorateur()
 
     def aller_racine(self, e):
         self.current_explorer_path = Path(getattr(self.app, "data_dir", "."))
-        self.app.current_explorer_path = self.current_explorer_path  # Persistance globale
+        self.app.current_explorer_path = self.current_explorer_path
         self.mettre_a_jour_affichage_explorateur()
 
     def rafraichir_explorateur_ui(self, e):
@@ -497,25 +509,21 @@ class ConfigurationView(ft.Container):
 
         suffix = file_path.suffix.lower()
 
-        # --- WINDOWS / MAC : Ouverture native directe en place ---
         if sys.platform in ["win32", "darwin"]:
             try:
                 if sys.platform == "win32":
                     os.startfile(str(file_path))
                 else:
                     subprocess.run(["open", str(file_path)], check=True)
-
                 self._show_snackbar(f"📂 Ouverture de {file_path.name}...")
                 return
             except Exception:
                 pass
 
-        # --- FICHIERS TEXTE : Aperçu texte ---
         if suffix in [".json", ".txt", ".log", ".md", ".csv", ".ini"]:
             self._afficher_dialogue_fichier(file_path)
             return
 
-        # --- ANDROID / MOBILE : Copie dans Téléchargements/Asso/Saison + Ouverture automatique ---
         try:
             target_dir = self._get_dossier_export()
             dest_path = target_dir / file_path.name
@@ -526,12 +534,10 @@ class ConfigurationView(ft.Container):
                 return
 
             dest_path.write_bytes(file_bytes)
-            
             asso_name = target_dir.parent.name
             season_name = target_dir.name
             self._show_snackbar(f"✅ Enregistré dans {asso_name}/{season_name}")
 
-            # Ouverture automatique de la copie Android via Flet
             page_obj = getattr(self.app, "page", None) or self.page
             if page_obj:
                 page_obj.launch_url(dest_path.as_uri())
@@ -540,7 +546,6 @@ class ConfigurationView(ft.Container):
         except Exception as ex:
             self._show_snackbar(f"Fichier copié, mais ouverture auto impossible : {ex}", is_error=True)
 
-        # --- FALLBACK : FilePicker si l'accès direct échoue ---
         if hasattr(self.app, "file_picker") and hasattr(self.app.file_picker, "save_file"):
             try:
                 filename = file_path.name
@@ -564,7 +569,7 @@ class ConfigurationView(ft.Container):
         is_text = file_path.suffix.lower() in [".json", ".txt", ".log", ".md", ".csv", ".ini"]
         if is_text:
             try:
-                if file_path.stat().st_size < 150 * 1024:  # Moins de 150 Ko
+                if file_path.stat().st_size < 150 * 1024:
                     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                         contenu_texte = f.read()
                 else:
@@ -593,14 +598,7 @@ class ConfigurationView(ft.Container):
             controls_list.append(ft.Text("Ce type de fichier ne peut pas être prévisualisé en texte brut.", size=12, color="grey400"))
 
         def exporter_clic(_):
-            try:
-                if hasattr(page_obj, "open"):
-                    page_obj.open(dlg)
-                else:
-                    dlg.open = False
-                    page_obj.update()
-            except Exception:
-                pass
+            self._fermer_dlg(page_obj, dlg)
 
             if hasattr(self.app, "file_picker") and hasattr(self.app.file_picker, "save_file"):
                 try:
@@ -624,6 +622,10 @@ class ConfigurationView(ft.Container):
             bgcolor="#1F2937"
         )
         
+        self._ouvrir_dlg(page_obj, dlg)
+
+    def _ouvrir_dlg(self, page_obj, dlg):
+        """Ouvre un dialogue de manière compatible inter-versions Flet."""
         try:
             if hasattr(page_obj, "open"):
                 page_obj.open(dlg)
@@ -637,15 +639,19 @@ class ConfigurationView(ft.Container):
             page_obj.update()
 
     def _fermer_dlg(self, page_obj, dlg):
+        """Ferme un dialogue de manière compatible inter-versions Flet."""
         try:
-            if hasattr(page_obj, "open"):
-                page_obj.open(dlg)
+            if hasattr(page_obj, "close"):
+                page_obj.close(dlg)
             else:
                 dlg.open = False
                 page_obj.update()
         except Exception:
             dlg.open = False
-            page_obj.update()
+            try:
+                page_obj.update()
+            except Exception:
+                pass
 
     def _sauvegarder_copie_fichier(self, e, source_path):
         if not getattr(e, "path", None):
@@ -733,6 +739,84 @@ class ConfigurationView(ft.Container):
             self._show_snackbar(f"🔗 Lien Drive enregistré ! ID du dossier : {folder_id}")
         else:
             self._show_snackbar("Lien réinitialisé.")
+
+    def demander_credentials(self, e):
+        if hasattr(self.app, "file_picker"):
+            self.app.file_picker.on_result = self.on_credentials_picked
+            self.app.file_picker.pick_files(
+                allowed_extensions=["json"],
+                dialog_title="Sélectionner le fichier credentials.json"
+            )
+        else:
+            self._show_snackbar("Sélecteur de fichier indisponible.", is_error=True)
+
+    def on_credentials_picked(self, e):
+        if not e.files or len(e.files) == 0:
+            return
+
+        picked_file = e.files[0]
+        try:
+            src_path = Path(picked_file.path) if picked_file.path else None
+            if not src_path or not src_path.exists():
+                self._show_snackbar("❌ Fichier introuvable.", is_error=True)
+                return
+
+            content = src_path.read_bytes()
+
+            dest_data = Path(getattr(self.app, "data_dir", ".")) / "credentials.json"
+            dest_data.write_bytes(content)
+
+            try:
+                Path("credentials.json").write_bytes(content)
+            except Exception:
+                pass
+
+            self.txt_drive_status.value = "Fichier credentials.json détecté"
+            self.txt_drive_status.color = "#4ADE80"
+            self.update()
+
+            self._show_snackbar("🔑 Fichier credentials.json importé avec succès !")
+        except Exception as ex:
+            self._show_snackbar(f"❌ Erreur lors de l'importation : {ex}", is_error=True)
+
+    def demander_token(self, e):
+        if hasattr(self.app, "file_picker"):
+            self.app.file_picker.on_result = self.on_token_picked
+            self.app.file_picker.pick_files(
+                allowed_extensions=["json"],
+                dialog_title="Sélectionner le fichier token.json"
+            )
+        else:
+            self._show_snackbar("Sélecteur de fichier indisponible.", is_error=True)
+
+    def on_token_picked(self, e):
+        if not e.files or len(e.files) == 0:
+            return
+
+        picked_file = e.files[0]
+        try:
+            src_path = Path(picked_file.path) if picked_file.path else None
+            if not src_path or not src_path.exists():
+                self._show_snackbar("❌ Fichier introuvable.", is_error=True)
+                return
+
+            content = src_path.read_bytes()
+
+            dest_data = Path(getattr(self.app, "data_dir", ".")) / "token.json"
+            dest_data.write_bytes(content)
+
+            try:
+                Path("token.json").write_bytes(content)
+            except Exception:
+                pass
+
+            self.txt_token_status.value = "Fichier token.json détecté"
+            self.txt_token_status.color = "#4ADE80"
+            self.update()
+
+            self._show_snackbar("🔑 Fichier token.json importé avec succès !")
+        except Exception as ex:
+            self._show_snackbar(f"❌ Erreur lors de l'importation : {ex}", is_error=True)
 
     def demander_dossier_cloud(self, e):
         if hasattr(self.app, "dir_picker"):
@@ -871,31 +955,100 @@ class ConfigurationView(ft.Container):
             self._show_snackbar(f"Erreur de sauvegarde : {ex}", is_error=True)
 
     def envoyer_sauvegarde_drive(self, e):
-        try:
-            if hasattr(self.app, "db"):
-                zip_path = self.app.db.create_local_backup()
-                folder_id = self.app.association.get("drive_folder_id")
-                res = self.app.db.upload_to_drive(zip_path, folder_id=folder_id)
-                self._show_snackbar(f"☁️ Sauvegarde transmise sur Google Drive (ID: {res.get('id')}) !")
-            else:
-                self._show_snackbar("Gestionnaire de données indisponible.", is_error=True)
-        except Exception as ex:
-            self._show_snackbar(f"❌ Erreur Google Drive : {ex}", is_error=True)
+        """Envoie la sauvegarde locale vers Google Drive avec affichage d'un popup de chargement."""
+        page_obj = getattr(self.app, "page", None) or getattr(self, "page", None)
+
+        loading_dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.ProgressRing(color="#4ADE80", width=40, height=40),
+                        ft.Text("Envoi de la sauvegarde sur Google Drive...", weight="bold", color="white", size=14),
+                        ft.Text("Veuillez patienter pendant le transfert...", size=12, color="grey400"),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    tight=True,
+                    spacing=15,
+                ),
+                padding=10,
+            ),
+            bgcolor="#1F2937",
+        )
+
+        def worker():
+            msg = ""
+            is_err = False
+            try:
+                if hasattr(self.app, "db"):
+                    zip_path = self.app.db.create_local_backup()
+                    folder_id = self.app.association.get("drive_folder_id")
+                    res = self.app.db.upload_to_drive(zip_path, folder_id=folder_id)
+                    msg = f"☁ Sauvegarde transmise sur Google Drive (ID: {res.get('id')}) !"
+                else:
+                    msg = "Gestionnaire de données indisponible."
+                    is_err = True
+            except Exception as ex:
+                msg = f"❌ Erreur Google Drive : {ex}"
+                is_err = True
+            finally:
+                self._fermer_dlg(page_obj, loading_dlg)
+                self._show_snackbar(msg, is_error=is_err)
+
+        self._ouvrir_dlg(page_obj, loading_dlg)
+        threading.Thread(target=worker, daemon=True).start()
 
     def telecharger_derniere_sauvegarde_drive(self, e):
-        try:
-            if hasattr(self.app, "db"):
-                folder_id = self.app.association.get("drive_folder_id")
-                if self.app.db.restore_from_drive_latest(folder_id=folder_id):
-                    if hasattr(self.app, "load_data"):
-                        self.app.load_data()
-                    if hasattr(self.app, "navigate_to") and hasattr(self.app, "current_view_name"):
-                        self.app.navigate_to(self.app.current_view_name)
-                    self._show_snackbar("📥 Dernière sauvegarde du Drive rapatriée et appliquée !")
+        """Récupère et applique la dernière sauvegarde Drive avec affichage d'un popup de chargement."""
+        page_obj = getattr(self.app, "page", None) or getattr(self, "page", None)
+
+        loading_dlg = ft.AlertDialog(
+            modal=True,
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.ProgressRing(color="#93C5FD", width=40, height=40),
+                        ft.Text("Récupération de la sauvegarde depuis Google Drive...", weight="bold", color="white", size=14),
+                        ft.Text("Veuillez patienter pendant le téléchargement...", size=12, color="grey400"),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    tight=True,
+                    spacing=15,
+                ),
+                padding=10,
+            ),
+            bgcolor="#1F2937",
+        )
+
+        def worker():
+            msg = ""
+            is_err = False
+            try:
+                if hasattr(self.app, "db"):
+                    folder_id = self.app.association.get("drive_folder_id")
+                    if self.app.db.restore_from_drive_latest(folder_id=folder_id):
+                        if hasattr(self.app, "load_data"):
+                            self.app.load_data()
+                        if hasattr(self.app, "navigate_to") and hasattr(self.app, "current_view_name"):
+                            self.app.navigate_to(self.app.current_view_name)
+                        msg = "📥 Dernière sauvegarde du Drive rapatriée et appliquée !"
+                    else:
+                        msg = "❌ Impossible de restaurer la sauvegarde Cloud."
+                        is_err = True
                 else:
-                    self._show_snackbar("❌ Impossible de restaurer la sauvegarde Cloud.", is_error=True)
-        except Exception as ex:
-            self._show_snackbar(f"❌ Erreur de récupération Drive : {ex}", is_error=True)
+                    msg = "Gestionnaire de données indisponible."
+                    is_err = True
+            except Exception as ex:
+                msg = f"❌ Erreur de récupération Drive : {ex}"
+                is_err = True
+            finally:
+                self._fermer_dlg(page_obj, loading_dlg)
+                self._show_snackbar(msg, is_error=is_err)
+
+        self._ouvrir_dlg(page_obj, loading_dlg)
+        threading.Thread(target=worker, daemon=True).start()
 
     def reinitialiser_cache(self, e):
         page_obj = getattr(self.app, "page", None) or self.page
