@@ -14,61 +14,61 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-# --- ARBORESCENCE PHARE (Style B-Association) ---
+# --- ARBORESCENCE FLUX MULTISPORT ---
 CATEGORIES_FLUX = {
     "Dépense": {
         "Cotisations & Licences": [
-            "Cotis à l'instance nationale",
+            "Cotisations aux fédérations & ligues (FFK, FFF, UFOLEP...)",
             "Licences versées pour les membres",
-            "Cotisations diverses"
+            "Cotisations & affiliations diverses"
         ],
         "Déplacements, Missions & Réceptions": [
-            "Frais deplacement",
-            "Frais de pot (AG...)",
-            "Frais restau et hébergement"
+            "Frais de déplacement (Transports, péages)",
+            "Frais de réception & conviviaux (AG, pots...)",
+            "Hébergement & Restauration"
         ],
         "Achats & Matériel": [
-            "Achat Matériel (Protections, Tatamis, Pao)",
-            "Vêtements et écussons club",
-            "Petites fournitures de bureau"
+            "Achat matériel sportif (Ballons, raquettes, tatamis...)",
+            "Équipements & tenues du club (Maillots, survêtements)",
+            "Petites fournitures de bureau & administration"
         ],
         "Banque": [
-            "Frais banque...",
+            "Frais bancaires & TPE",
             "Intérêts emprunts"
         ],
         "Assurances": [
-            "Assurances..."
+            "Assurances & garanties"
         ],
         "Manifestations & Stages": [
-            "Frais organisation compétitions",
-            "Rémunération experts / intervenants",
-            "Achat buvette et goûters"
+            "Frais organisation compétitions & tournois",
+            "Rémunération experts, juges & intervenants",
+            "Achat buvette & restauration événements"
         ]
     },
     "Recette": {
         "Cotisations & Licences": [
             "Cotisations Adhérents",
-            "Licences perçues",
-            "Droits d'entrée"
+            "Licences / Affiliations perçues",
+            "Droits d'entrée & inscriptions"
         ],
         "Subventions & Aides": [
             "Subvention Mairie",
             "Subvention Départementale / Régionale",
-            "Aides de la CAF / Pass'Sport",
-            "Subvention ANS (ex-CNDS)"
+            "Aides CAF / Pass'Sport / ANS",
+            "Mécénat & Fondations"
         ],
         "Événements & Buvette": [
-            "Entrées compétitions / Gala",
+            "Entrées compétitions / Galas / Tournois",
             "Ventes buvette & gâteaux",
-            "Inscriptions stages"
+            "Inscriptions stages multisports"
         ],
         "Partenariats & Dons": [
             "Sponsoring entreprises",
             "Dons des particuliers (Mécénat)"
         ],
         "Produits Divers": [
-            "Vente de matériel (Kimonos, ceintures)",
-            "Remboursements d'assurances"
+            "Vente de matériel & tenues du club",
+            "Remboursements d'assurances & divers"
         ]
     }
 }
@@ -84,9 +84,12 @@ class ComptabiliteView(ft.Container):
         self.picking_row_index = -1
         self.dialog = None
 
-        # --- INITIALISATION FILEPICKER (Justificatifs uniquement) ---
+        # --- INITIALISATION FILEPICKER ---
         self.file_picker = ft.FilePicker(on_result=self.on_file_picked)
         self.app.page.overlay.append(self.file_picker)
+
+        # --- RECUPERATION DES SECTIONS / SPORTS ---
+        self.sections_disponibles = self.get_sections_list()
 
         # --- COMPOSANTS DU FORMULAIRE DE SAISIE ---
         self.input_date = ft.TextField(
@@ -98,7 +101,7 @@ class ComptabiliteView(ft.Container):
         self.input_libelle = ft.TextField(
             label="Libellé / Description", 
             expand=True, 
-            hint_text="Ex: Subvention Mairie, Frais de route AG..."
+            hint_text="Ex : Subvention Mairie, Achat ballons..."
         )
         self.input_montant = ft.TextField(
             label="Montant (€)", 
@@ -106,9 +109,16 @@ class ComptabiliteView(ft.Container):
             keyboard_type=ft.KeyboardType.NUMBER
         )
         
+        self.dropdown_section = ft.Dropdown(
+            label="Section / Sport",
+            width=180,
+            options=[ft.dropdown.Option(sec) for sec in self.sections_disponibles],
+            value=self.sections_disponibles[0] if self.sections_disponibles else "Général"
+        )
+
         self.dropdown_type = ft.Dropdown(
             label="Type",
-            width=140,
+            width=130,
             options=[
                 ft.dropdown.Option("Recette"),
                 ft.dropdown.Option("Dépense"),
@@ -168,6 +178,7 @@ class ComptabiliteView(ft.Container):
         self.table_compta = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Date")),
+                ft.DataColumn(ft.Text("Section")),
                 ft.DataColumn(ft.Text("Libellé & Mode")),
                 ft.DataColumn(ft.Text("Catégorie")),
                 ft.DataColumn(ft.Text("Sous-Catégorie")),
@@ -197,7 +208,7 @@ class ComptabiliteView(ft.Container):
             controls=[
                 ft.Row([
                     ft.Icon(ft.icons.ACCOUNT_BALANCE_WALLET_ROUNDED, size=30, color=self.accent_color),
-                    ft.Text("Registre Comptable & Double Saisie", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Text("Registre Comptable Multisport", size=24, weight=ft.FontWeight.BOLD),
                 ]),
                 ft.Divider(height=5),
 
@@ -211,7 +222,7 @@ class ComptabiliteView(ft.Container):
                             padding=15,
                             border_radius=10,
                             content=ft.Column([
-                                ft.Text("Bilan Financier", size=15, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_200),
+                                ft.Text("Bilan Financier Global", size=15, weight=ft.FontWeight.BOLD, color=ft.colors.BLUE_200),
                                 self.create_finance_card("Total Recettes", self.txt_recettes, ft.icons.ARROW_UPWARD, ft.colors.GREEN_900),
                                 self.create_finance_card("Total Dépenses", self.txt_depenses, ft.icons.ARROW_DOWNWARD, ft.colors.RED_900),
                                 self.create_finance_card("Solde Général", self.txt_solde, ft.icons.ACCOUNT_BALANCE, ft.colors.BLUE_GREY_900),
@@ -232,9 +243,10 @@ class ComptabiliteView(ft.Container):
                                     ft.Container(self.input_montant, col={"sm": 12, "md": 3}),
                                 ]),
                                 ft.ResponsiveRow([
-                                    ft.Container(self.dropdown_type, col={"sm": 12, "md": 3}),
-                                    ft.Container(self.dropdown_cat, col={"sm": 12, "md": 4}),
-                                    ft.Container(self.dropdown_subcat, col={"sm": 12, "md": 5}),
+                                    ft.Container(self.dropdown_section, col={"sm": 12, "md": 3}),
+                                    ft.Container(self.dropdown_type, col={"sm": 12, "md": 2}),
+                                    ft.Container(self.dropdown_cat, col={"sm": 12, "md": 3}),
+                                    ft.Container(self.dropdown_subcat, col={"sm": 12, "md": 4}),
                                 ]),
                                 ft.ResponsiveRow([
                                     ft.Container(self.dropdown_mode, col={"sm": 12, "md": 5}),
@@ -287,6 +299,14 @@ class ComptabiliteView(ft.Container):
                 self.operations_table_container
             ]
         )
+
+    def get_sections_list(self):
+        sections = ["Général"]
+        if hasattr(self.app, "sports") and isinstance(self.app.sports, list) and self.app.sports:
+            sections.extend([s for s in self.app.sports if s not in sections])
+        elif isinstance(self.app.association.get("sports"), list):
+            sections.extend([s for s in self.app.association.get("sports") if s not in sections])
+        return sections
 
     def create_finance_card(self, title, text_control, icon, bg_color):
         return ft.Container(
@@ -342,10 +362,12 @@ class ComptabiliteView(ft.Container):
         for idx, cotis in enumerate(self.app.cotisations):
             if cotis.get("statut") == "Encaissé / Validé":
                 montant = float(cotis.get("montant", 0))
+                section_item = cotis.get("sport") or cotis.get("section") or "Général"
                 toutes_operations.append({
                     "index_cotisation": idx,
                     "date": cotis.get("date"),
-                    "libelle": f"Adhésion: {cotis.get('membre')}",
+                    "section": section_item,
+                    "libelle": f"Adhésion : {cotis.get('membre')}",
                     "categorie": "Cotisations & Licences",
                     "sous_categorie": "Cotisations Adhérents",
                     "type": "Recette",
@@ -358,7 +380,6 @@ class ComptabiliteView(ft.Container):
         for idx, op in enumerate(self.app.finances):
             montant = float(op.get("montant", 0))
             
-            # Formatage du libellé avec le mode de paiement et éventuel chèque
             libelle = op.get("libelle", "")
             mode = op.get("mode_paiement", "")
             if mode:
@@ -370,6 +391,7 @@ class ComptabiliteView(ft.Container):
             toutes_operations.append({
                 "index_db": idx,
                 "date": op.get("date"),
+                "section": op.get("section", "Général"),
                 "libelle": libelle,
                 "categorie": op.get("categorie"),
                 "sous_categorie": op.get("sous_categorie", "N/A"),
@@ -406,7 +428,6 @@ class ComptabiliteView(ft.Container):
                 ], spacing=0)
             else:
                 if justif_path:
-                    filename = Path(justif_path).name
                     cell_justif = ft.Row([
                         ft.IconButton(ft.icons.INSERT_DRIVE_FILE_ROUNDED, icon_color=ft.colors.BLUE_400, icon_size=20, on_click=lambda e, path=justif_path: self.ouvrir_justificatif(path)),
                         ft.IconButton(ft.icons.DELETE_FOREVER_ROUNDED, icon_color=ft.colors.RED_400, icon_size=18, on_click=lambda e, idx=db_idx: self.retirer_justificatif_seul(idx))
@@ -423,6 +444,12 @@ class ComptabiliteView(ft.Container):
                 ft.DataRow(
                     cells=[
                         ft.DataCell(ft.Text(item.get("date"), style=style_texte)),
+                        ft.DataCell(ft.Container(
+                            content=ft.Text(item.get("section", "Général"), size=11, weight=ft.FontWeight.W_500),
+                            bgcolor=ft.colors.BLUE_GREY_900,
+                            padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                            border_radius=5
+                        )),
                         ft.DataCell(ft.Text(item.get("libelle"), style=style_texte)),
                         ft.DataCell(ft.Text(item.get("categorie"), style=style_texte)),
                         ft.DataCell(ft.Text(item.get("sous_categorie"), style=style_texte)),
@@ -455,6 +482,7 @@ class ComptabiliteView(ft.Container):
 
         nouvelle_ligne = {
             "date": date_operation,
+            "section": self.dropdown_section.value or "Général",
             "libelle": self.input_libelle.value,
             "categorie": self.dropdown_cat.value,
             "sous_categorie": self.dropdown_subcat.value,
@@ -526,7 +554,6 @@ class ComptabiliteView(ft.Container):
         self.update()
 
     def ouvrir_justificatif(self, path):
-        """Ouverture multiplateforme robuste avec gestion propre des erreurs si xdg-open est absent."""
         if not path:
             return
         p = Path(path)
@@ -547,13 +574,12 @@ class ComptabiliteView(ft.Container):
             elif sys.platform == "darwin":
                 subprocess.run(["open", str(p)], check=True)
             else:
-                # Linux / environnements sans xdg-open par défaut
                 try:
                     subprocess.run(["xdg-open", str(p)], check=True)
                 except Exception:
                     self.show_snack(f"✅ PDF enregistré avec succès dans : {p.parent}", is_error=False)
                     return
-        except Exception as err:
+        except Exception:
             self.show_snack(f"✅ PDF enregistré dans {p.parent}", is_error=False)
 
     def retirer_justificatif_seul(self, idx):
@@ -652,6 +678,12 @@ class ComptabiliteView(ft.Container):
         self.edit_montant = ft.TextField(label="Montant (€)", value=str(op.get("montant", 0.0)), keyboard_type=ft.KeyboardType.NUMBER)
         self.edit_date = ft.TextField(label="Date (JJ/MM/AAAA)", value=op.get("date", datetime.now().strftime("%d/%m/%Y")))
         
+        self.edit_section = ft.Dropdown(
+            label="Section / Sport",
+            options=[ft.dropdown.Option(s) for s in self.sections_disponibles],
+            value=op.get("section", "Général")
+        )
+
         t_val = op.get("type", "Dépense")
         self.edit_type = ft.Dropdown(
             label="Type",
@@ -681,7 +713,6 @@ class ComptabiliteView(ft.Container):
             value=subcat_val
         )
 
-        # Mode de paiement et chèque dans la modale d'édition
         mode_val = op.get("mode_paiement", "Virement")
         self.edit_mode = ft.Dropdown(
             label="Mode de paiement",
@@ -719,6 +750,7 @@ class ComptabiliteView(ft.Container):
             op["libelle"] = self.edit_libelle.value
             op["montant"] = m_val
             op["date"] = self.edit_date.value
+            op["section"] = self.edit_section.value
             op["type"] = self.edit_type.value
             op["categorie"] = self.edit_cat.value
             op["sous_categorie"] = self.edit_subcat.value
@@ -734,10 +766,11 @@ class ComptabiliteView(ft.Container):
         self.dialog = ft.AlertDialog(
             title=ft.Text("Modifier la ligne comptable"),
             content=ft.Container(
-                width=450, height=450,
+                width=450, height=480,
                 content=ft.Column([
                     self.edit_libelle,
-                    ft.Row([self.edit_type, self.edit_montant], spacing=10),
+                    ft.Row([self.edit_section, self.edit_type], spacing=10),
+                    self.edit_montant,
                     self.edit_cat,
                     self.edit_subcat,
                     ft.Row([self.edit_mode, self.edit_cheque], spacing=10),
@@ -784,7 +817,8 @@ class ComptabiliteView(ft.Container):
             if cotis.get("statut") == "Encaissé / Validé":
                 toutes_ops.append({
                     "date": cotis.get("date"),
-                    "libelle": f"Adhésion: {cotis.get('membre')}",
+                    "section": cotis.get("sport") or cotis.get("section") or "Général",
+                    "libelle": f"Adhésion : {cotis.get('membre')}",
                     "categorie": "Cotisations & Licences",
                     "sous_categorie": "Cotisations Adhérents",
                     "type": "Recette",
@@ -801,6 +835,7 @@ class ComptabiliteView(ft.Container):
                     lib += f" [{mode}]"
             toutes_ops.append({
                 "date": op.get("date"),
+                "section": op.get("section", "Général"),
                 "libelle": lib,
                 "categorie": op.get("categorie"),
                 "sous_categorie": op.get("sous_categorie", "N/A"),
@@ -811,51 +846,51 @@ class ComptabiliteView(ft.Container):
         toutes_ops.reverse()
 
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=25, leftMargin=25, topMargin=30, bottomMargin=30)
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=30, bottomMargin=30)
         story = []
         styles = getSampleStyleSheet()
         
         title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=18, spaceAfter=12, textColor=colors.HexColor("#1E3A8A"))
-        story.append(Paragraph(f"Grand Livre & Journal Financier - {self.app.association.get('nom', 'Club')}", title_style))
+        story.append(Paragraph(f"Grand Livre & Journal Financier - {self.app.association.get('nom', 'Club Multisport')}", title_style))
         story.append(Paragraph(f"Saison en cours - Document d'AG généré le {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
         story.append(Spacer(1, 15))
 
-        data = [["Date", "Désignation", "Poste Comptable", "Sous-Poste", "Flux", "Montant"]]
+        data = [["Date", "Section", "Désignation", "Poste Comptable", "Sous-Poste", "Flux", "Montant"]]
         for op in toutes_ops:
             data.append([
                 op['date'],
-                op['libelle'][:25],
+                op['section'][:12],
+                op['libelle'][:22],
                 op['categorie'],
                 op['sous_categorie'],
                 op['type'],
                 f"{op['montant']:.2f} €"
             ])
 
-        table_journal = Table(data, colWidths=[60, 130, 115, 115, 55, 70])
+        table_journal = Table(data, colWidths=[55, 65, 115, 105, 105, 50, 60])
         table_journal.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1E3A8A")),
             ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('ALIGN', (5,0), (5,-1), 'RIGHT'),
+            ('ALIGN', (6,0), (6,-1), 'RIGHT'),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#CBD5E1")),
-            ('FONTSIZE', (0,0), (-1,-1), 8.5),
+            ('FONTSIZE', (0,0), (-1,-1), 8),
             ('BOTTOMPADDING', (0,0), (-1,0), 6),
         ]))
         
         for i in range(1, len(data)):
-            flux = data[i][4]
+            flux = data[i][5]
             bg = colors.HexColor("#F8FAFC") if i % 2 == 0 else colors.white
             table_journal.setStyle(TableStyle([
                 ('BACKGROUND', (0, i), (-1, i), bg),
-                ('TEXTCOLOR', (4, i), (5, i), colors.HexColor("#16A34A") if flux == "Recette" else colors.HexColor("#DC2626"))
+                ('TEXTCOLOR', (5, i), (6, i), colors.HexColor("#16A34A") if flux == "Recette" else colors.HexColor("#DC2626"))
             ]))
 
         story.append(table_journal)
         doc.build(story)
         pdf_bytes = buffer.getvalue()
 
-        # Enregistrement direct dans le dossier interne "exports"
         exports_dir = self.app.data_dir / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
         file_path = exports_dir / f"journal_complet_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -905,7 +940,7 @@ class ComptabiliteView(ft.Container):
         h3_style = ParagraphStyle('H3Style', parent=styles['Heading3'], fontSize=11, spaceBefore=12, spaceAfter=8, textColor=colors.HexColor("#0F172A"))
 
         story.append(Paragraph("Rapport Financier de l'Exercice", title_style))
-        story.append(Paragraph(f"Bilan officiel présenté à l'AG - {self.app.association.get('nom', 'Club')}", subtitle_style))
+        story.append(Paragraph(f"Bilan officiel présenté à l'AG - {self.app.association.get('nom', 'Club Multisport')}", subtitle_style))
 
         solde = total_rec - total_dep
         solde_color = "#16A34A" if solde >= 0 else "#DC2626"
@@ -972,7 +1007,6 @@ class ComptabiliteView(ft.Container):
         doc.build(story)
         pdf_bytes = buffer.getvalue()
 
-        # Enregistrement direct dans le dossier interne "exports"
         exports_dir = self.app.data_dir / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
         file_path = exports_dir / f"bilan_ag_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
