@@ -3,6 +3,7 @@ import os
 import sys
 import webbrowser
 from datetime import datetime
+from pathlib import Path
 import flet as ft
 
 IS_ANDROID = "ANDROID_STORAGE" in os.environ or "ANDROID_ROOT" in os.environ or hasattr(sys, "getandroidapilevel")
@@ -42,43 +43,48 @@ class MembresView(ft.Container):
         self.input_date_naissance = ft.TextField(label="Né(e) le (JJ/MM/AAAA)", expand=True, hint_text="Ex: 14/02/2010")
         self.input_photo = ft.TextField(label="Photo", expand=True, read_only=True, hint_text="Aucune photo sélectionnée")
         
-        self.input_email = ft.TextField(label="Adresse Email", expand=True, keyboard_type="email")
-        self.input_telephone = ft.TextField(label="N° Téléphone", expand=True, keyboard_type="phone")
+        self.input_email = ft.TextField(label="Adresse Email", expand=True, keyboard_type=ft.KeyboardType.EMAIL)
+        self.input_telephone = ft.TextField(label="N° Téléphone", expand=True, keyboard_type=ft.KeyboardType.PHONE)
         
         self.input_rue = ft.TextField(label="Rue / Avenue / Boulevard", expand=True)
-        self.input_cp = ft.TextField(label="Code Postal", expand=True, keyboard_type="number")
+        self.input_cp = ft.TextField(label="Code Postal", expand=True, keyboard_type=ft.KeyboardType.NUMBER)
         self.input_ville = ft.TextField(label="Ville", expand=True)
         
         self.input_responsable = ft.TextField(label="Responsable Légal (Si mineur)", expand=True, hint_text="Nom, Prénom + Lien (Ex: Père)")
-        self.check_medical = ft.Checkbox(label="Certificat Médical OK / Fourni", value=False)
+        self.check_medical = ft.Checkbox(label="Certificat Médical / Attestation OK", value=False)
         self.check_accord_soins = ft.Checkbox(label="Accord parental soins urgences", value=False)
         self.input_allergies = ft.TextField(label="Allergies / Contre-indications", expand=True, hint_text="Ex: Asthme... (Laisser vide si RAS)")
         self.input_fiche_medecin = ft.TextField(label="Notes du médecin / Suivi", multiline=True, min_lines=2, max_lines=4, expand=True)
 
-        self.input_licence = ft.TextField(label="N° Licence", expand=True)
-        self.check_licence_prise = ft.Checkbox(label="Licence prise", value=False)
-        
-        # --- DROPDOWN NIVEAU GÉNÉRIQUE ET COMPLET ---
-        self.dropdown_niveau = ft.Dropdown(
-            label="Niveau / Grade / Catégorie",
+        self.input_licence = ft.TextField(label="N° Licence / Affiliation", expand=True)
+        self.check_licence_validee = ft.Checkbox(label="Licence / Cotisation fédérale validée", value=False)
+        self.dropdown_section = ft.Dropdown(
+            label="Section / Discipline principale",
             expand=True,
-            options=self.generer_options_niveaux(),
-            value="Débutant"
+            options=[
+                ft.dropdown.Option("Multi-sports"),
+                ft.dropdown.Option("Fitness / Gym"),
+                ft.dropdown.Option("Sports de raquette"),
+                ft.dropdown.Option("Sports collectifs"),
+                ft.dropdown.Option("Athlétisme / Course"),
+                ft.dropdown.Option("Espaces aquatiques"),
+                ft.dropdown.Option("Autre / Loisirs"),
+            ],
+            value="Multi-sports"
         )
-        
         self.input_historique_licences = ft.TextField(
-            label="Historique des saisons passées", 
+            label="Historique / Disciplines pratiquées", 
             multiline=True, 
             min_lines=2, 
             max_lines=4, 
             expand=True,
-            hint_text="Ex: 2023/2024: Club de Lyon..."
+            hint_text="Ex: 2023/2024: Multi-sports enfants, Badminton..."
         )
 
         self.input_tarif_custom = ft.TextField(
             label="Cotisation due (€) [Sur-mesure]", 
             expand=True, 
-            keyboard_type="number",
+            keyboard_type=ft.KeyboardType.NUMBER,
             hint_text="Vide = Calcul auto selon l'âge"
         )
 
@@ -102,8 +108,20 @@ class MembresView(ft.Container):
             on_change=self.filtrer_membres
         )
 
+        self.dropdown_filtre_licence = ft.Dropdown(
+            label="Filtrer par Licence",
+            expand=True,
+            options=[
+                ft.dropdown.Option("Tous", "Toutes les licences"),
+                ft.dropdown.Option("Validee", "Licence validée"),
+                ft.dropdown.Option("NonValidee", "Licence non validée"),
+            ],
+            value="Tous",
+            on_change=self.filtrer_membres
+        )
+
         self.btn_export_pdf = ft.ElevatedButton(
-            "📄 Exporter la liste en PDF",
+            "Exporter la liste en PDF",
             icon=get_icon_safe("PICTURE_AS_PDF"),
             bgcolor="#334155",
             color="white",
@@ -114,7 +132,7 @@ class MembresView(ft.Container):
         self.table_membres = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Adhérent")),
-                ft.DataColumn(ft.Text("Licence / Niveau")),
+                ft.DataColumn(ft.Text("Section / Licence")),
                 ft.DataColumn(ft.Text("Contact")),
                 ft.DataColumn(ft.Text("Santé / Licence")),
                 ft.DataColumn(ft.Text("Cotisation / Solde")),
@@ -128,67 +146,8 @@ class MembresView(ft.Container):
 
         self.afficher_ecran_liste()
 
-    def generer_options_niveaux(self, valeur_actuelle=None):
-        """Génère une liste complète, catégorisée et extensible de niveaux."""
-        niveaux_asso = getattr(self.app, "association", {}).get("niveaux")
-        options = []
-
-        if niveaux_asso and isinstance(niveaux_asso, list):
-            for n in niveaux_asso:
-                options.append(ft.dropdown.Option(key=str(n), text=str(n)))
-        else:
-            structure_niveaux = [
-                # --- Niveaux Généraux ---
-                ("--- NIVEAUX GÉNÉRAUX ---", True),
-                ("Éveil / Baby-Sport", False),
-                ("Débutant", False),
-                ("Intermédiaire", False),
-                ("Confirmé", False),
-                ("Avancé", False),
-                ("Expert / Élite", False),
-
-                # --- Pratique & Compétition ---
-                ("--- PRATIQUE & PRÉPARATION ---", True),
-                ("Loisir / Entretien", False),
-                ("Compétition Régionale", False),
-                ("Compétition Nationale", False),
-                ("Haut Niveau / Pro", False),
-
-                # --- Grades & Ceintures ---
-                ("--- GRADES & CEINTURES ---", True),
-                ("Ceinture Blanche", False),
-                ("Ceinture Jaune", False),
-                ("Ceinture Orange", False),
-                ("Ceinture Verte", False),
-                ("Ceinture Bleue", False),
-                ("Ceinture Marron (1er Kyu)", False),
-                ("Ceinture Noire 1er Dan", False),
-                ("Ceinture Noire 2ème Dan", False),
-                ("Ceinture Noire 3ème Dan ou +", False),
-
-                # --- Encadrement & Arbitrage ---
-                ("--- ENCADREMENT & OFFICIELS ---", True),
-                ("Assistant / Aide-Moniteur", False),
-                ("Animateur / Initiateur", False),
-                ("Éducateur / Entraîneur", False),
-                ("Arbitre / Juge Officiel", False),
-            ]
-
-            for item, is_header in structure_niveaux:
-                if is_header:
-                    options.append(ft.dropdown.Option(key=f"hdr_{item}", text=item, disabled=True))
-                else:
-                    options.append(ft.dropdown.Option(key=item, text=item))
-
-        if valeur_actuelle and str(valeur_actuelle).strip():
-            cles_existantes = [o.key for o in options]
-            if valeur_actuelle not in cles_existantes:
-                options.insert(0, ft.dropdown.Option(key=valeur_actuelle, text=f"{valeur_actuelle} (Spécifique)"))
-
-        return options
-
     def did_mount(self):
-        page_obj = self.page or getattr(self.app, "page", None)
+        page_obj = self.get_page()
         if page_obj:
             if hasattr(page_obj, "overlay") and self.file_picker not in page_obj.overlay:
                 page_obj.overlay.append(self.file_picker)
@@ -196,13 +155,16 @@ class MembresView(ft.Container):
 
         self.recharger_donnees_actuelles()
 
+    def get_page(self):
+        return self.page or getattr(self.app, "page", None)
+
     def afficher_message(self, text, is_error=False):
-        color = "red700" if is_error else "green700"
-        page_obj = self.page or getattr(self.app, "page", None)
+        page_obj = self.get_page()
         if not page_obj:
             return
+        color = "red700" if is_error else "green700"
+        snack = ft.SnackBar(content=ft.Text(text), bgcolor=color)
         try:
-            snack = ft.SnackBar(ft.Text(text), bgcolor=color)
             if hasattr(page_obj, "open"):
                 page_obj.open(snack)
             elif hasattr(page_obj, "show_snack_bar"):
@@ -250,7 +212,7 @@ class MembresView(ft.Container):
             self.update()
 
     def generer_et_ouvrir_pdf_direct(self, e):
-        """Génère directement le PDF en mode portrait avec fpdf2 en tenant compte des filtres."""
+        """Génère directement le PDF en mode portrait avec fpdf2."""
         try:
             from fpdf import FPDF
         except ImportError:
@@ -261,11 +223,10 @@ class MembresView(ft.Container):
             membres_a_exporter = []
             filtre_txt = (self.input_recherche.value or "").strip().lower()
             filtre_cotis = self.dropdown_filtre_cotis.value or "Tous"
+            filtre_licence = self.dropdown_filtre_licence.value or "Tous"
 
             for m in getattr(self.app, "membres", []):
-                nom_str = (m.get('nom') or '').upper()
-                prenom_str = (m.get('prenom') or '')
-                nom_complet = f"{nom_str} {prenom_str}"
+                nom_complet = f"{m.get('nom', '').upper()} {m.get('prenom', '')}"
                 if filtre_txt and filtre_txt not in nom_complet.lower():
                     continue
 
@@ -274,11 +235,17 @@ class MembresView(ft.Container):
                     continue
                 elif filtre_cotis == "RestantDu" and bilan["is_solde"]:
                     continue
+
+                is_licence = bool(m.get("licence_validee", m.get("licence_prise_ffk", False)))
+                if filtre_licence == "Validee" and not is_licence:
+                    continue
+                elif filtre_licence == "NonValidee" and is_licence:
+                    continue
                 
                 membres_a_exporter.append((m, bilan))
 
             if not membres_a_exporter:
-                self.afficher_message("⚠️ Aucun adhérent ne correspond aux filtres actuels.", is_error=True)
+                self.afficher_message("Aucun adhérent ne correspond aux filtres actuels.", is_error=True)
                 return
 
             dossier_cible = self.app.db.get_documents_saison_dir()
@@ -290,21 +257,21 @@ class MembresView(ft.Container):
             pdf.set_margins(10, 10, 10)
 
             pdf.set_font("Arial", 'B', 14)
-            nom_asso = getattr(self.app, "association", {}).get("nom", "Association Sportive")
+            nom_asso = getattr(self.app, "association", {}).get("nom", "Club Multi-Sports")
             saison = getattr(self.app, "saison_active", "En cours")
             titre_texte = f"Liste des Adhérents - {nom_asso} (Saison {saison})"
-            pdf.cell(0, 10, txt=titre_texte.encode('latin-1', 'replace').decode('latin-1'), ln=True, align='C')
+            pdf.cell(0, 10, text=titre_texte.encode('latin-1', 'replace').decode('latin-1'), new_x="LMARGIN", new_y="NEXT", align='C')
             pdf.ln(4)
 
             col_widths = [45, 30, 45, 35, 35]
-            headers = ["Adhérent", "Contact", "Niveau / Licence", "Santé & Licence", "Cotisation"]
+            headers = ["Adhérent", "Contact", "Section / Licence", "Santé & Licence", "Cotisation"]
 
             pdf.set_font("Arial", 'B', 9)
             pdf.set_fill_color(51, 65, 85)
             pdf.set_text_color(255, 255, 255)
 
             for i, h in enumerate(headers):
-                pdf.cell(col_widths[i], 8, txt=h, border=1, align='C', fill=True)
+                pdf.cell(col_widths[i], 8, text=h, border=1, align='C', fill=True)
             pdf.ln()
 
             pdf.set_font("Arial", '', 8)
@@ -312,22 +279,26 @@ class MembresView(ft.Container):
 
             fill = False
             for m, bilan in membres_a_exporter:
-                pdf.set_fill_color(248, 250, 252) if fill else pdf.set_fill_color(255, 255, 255)
+                if fill:
+                    pdf.set_fill_color(248, 250, 252)
+                else:
+                    pdf.set_fill_color(255, 255, 255)
 
-                nom_complet = f"{(m.get('nom') or '').upper()} {m.get('prenom') or ''}"
-                contact = m.get('telephone') or 'N/A'
-                
-                niveau_str = (m.get('niveau_actuel') or 'Débutant').split('(')[0].strip()
-                lic_str = m.get('licence')
-                niveau_lic = f"{niveau_str} (Lic: {lic_str})" if lic_str else niveau_str
+                nom_complet = f"{m.get('nom', '').upper()} {m.get('prenom', '')}"
+                contact = m.get('telephone', 'N/A')
+                section_lic = f"{m.get('section', m.get('grade_actuel', 'Multi-sports'))}"
+                num_lic = m.get('licence_num', m.get('licence_ffk'))
+                if num_lic:
+                    section_lic += f"\nLic: {num_lic}"
 
                 certif = "Cert. OK" if m.get("certificat_medical_valide") else "Cert. Manq."
-                licence_statut = "Licence: Oui" if m.get("licence_prise") else "Licence: Non"
-                sante_str = f"{certif} | {licence_statut}"
+                lic_ok = m.get("licence_validee", m.get("licence_prise_ffk", False))
+                lic_str = "Licence: OK" if lic_ok else "Licence: Non"
+                sante_str = f"{certif} | {lic_str}"
 
                 cotis_str = bilan["badge_texte"]
 
-                row_data = [nom_complet, contact, niveau_lic, sante_str, cotis_str]
+                row_data = [nom_complet, contact, section_lic, sante_str, cotis_str]
 
                 if pdf.get_y() > 275:
                     pdf.add_page()
@@ -335,14 +306,14 @@ class MembresView(ft.Container):
                     pdf.set_fill_color(51, 65, 85)
                     pdf.set_text_color(255, 255, 255)
                     for i, h in enumerate(headers):
-                        pdf.cell(col_widths[i], 8, txt=h, border=1, align='C', fill=True)
+                        pdf.cell(col_widths[i], 8, text=h, border=1, align='C', fill=True)
                     pdf.ln()
                     pdf.set_font("Arial", '', 8)
                     pdf.set_text_color(0, 0, 0)
 
                 for i, text in enumerate(row_data):
                     safe_text = str(text).encode('latin-1', 'replace').decode('latin-1')
-                    pdf.cell(col_widths[i], 7, txt=safe_text, border=1, align='L', fill=True)
+                    pdf.cell(col_widths[i], 7, text=safe_text, border=1, align='L', fill=True)
                 
                 pdf.ln()
                 fill = not fill
@@ -350,7 +321,7 @@ class MembresView(ft.Container):
             pdf.output(str(chemin_complet))
 
             try:
-                page_obj = self.page or getattr(self.app, "page", None)
+                page_obj = self.get_page()
                 if page_obj and hasattr(page_obj, "share_files"):
                     page_obj.share_files([str(chemin_complet)])
                 else:
@@ -358,10 +329,10 @@ class MembresView(ft.Container):
             except Exception:
                 webbrowser.open(str(chemin_complet))
 
-            self.afficher_message(f"📄 PDF généré et ouvert avec succès !\nFichier : {nom_fichier}")
+            self.afficher_message(f"PDF généré et ouvert avec succès !\nFichier : {nom_fichier}")
         except Exception as ex:
             print(ex)
-            self.afficher_message(f"❌ Erreur lors de la génération du PDF : {ex}", is_error=True)
+            self.afficher_message(f"Erreur lors de la génération du PDF : {ex}", is_error=True)
 
     def calculer_age(self, date_str):
         if not date_str:
@@ -420,13 +391,13 @@ class MembresView(ft.Container):
         reste_a_payer = abs(solde) if not is_solde else 0.0
 
         if is_solde:
-            badge_texte = "✅ Soldé"
+            badge_texte = "Soldé"
             color = "green400"
         elif total_paye > 0:
-            badge_texte = f"🟠 Reste : {reste_a_payer:.2f} €"
+            badge_texte = f"Reste : {reste_a_payer:.2f} €"
             color = "orange400"
         else:
-            badge_texte = f"🔴 Non payé ({tarif_du:.2f} €)"
+            badge_texte = f"Non payé ({tarif_du:.2f} €)"
             color = "red400"
 
         return {
@@ -449,19 +420,20 @@ class MembresView(ft.Container):
             controls=[
                 ft.Row([
                     ft.Icon(get_icon_safe("PEOPLE"), size=28, color=self.accent_color),
-                    ft.Text("Adhérents & Licenciés", size=20, weight="bold"),
+                    ft.Text("Adhérents Multi-Sports", size=20, weight="bold"),
                 ]),
                 ft.Divider(),
                 
                 ft.ResponsiveRow([
-                    ft.Container(self.input_recherche, col={"sm": 12, "md": 7, "lg": 8}),
-                    ft.Container(self.dropdown_filtre_cotis, col={"sm": 12, "md": 5, "lg": 4}),
+                    ft.Container(self.input_recherche, col={"sm": 12, "md": 6, "lg": 6}),
+                    ft.Container(self.dropdown_filtre_cotis, col={"sm": 12, "md": 3, "lg": 3}),
+                    ft.Container(self.dropdown_filtre_licence, col={"sm": 12, "md": 3, "lg": 3}),
                 ], run_spacing=10),
 
                 ft.Row([
                     self.btn_export_pdf,
                     ft.OutlinedButton(
-                        "🔄 Renouvellement",
+                        "Renouvellement",
                         icon=get_icon_safe("AUTORENEW"),
                         height=44,
                         on_click=self.ouvrir_dialogue_renouvellement
@@ -561,15 +533,15 @@ class MembresView(ft.Container):
                     ft.Row([self.input_fiche_medecin]),
                 ]),
 
-                self.creer_section_card("4. Licence, Niveau & Cotisation", [
+                self.creer_section_card("4. Section, Licence & Cotisation", [
                     ft.ResponsiveRow([
                         ft.Container(self.input_licence, col={"sm": 12, "md": 6}),
-                        ft.Container(self.dropdown_niveau, col={"sm": 12, "md": 6}),
+                        ft.Container(self.dropdown_section, col={"sm": 12, "md": 6}),
                     ]),
                     ft.ResponsiveRow([
                         ft.Container(self.input_tarif_custom, col={"sm": 12, "md": 12}),
                     ]),
-                    ft.Row([self.check_licence_prise]),
+                    ft.Row([self.check_licence_validee]),
                     ft.Row([self.input_historique_licences]),
                 ]),
 
@@ -603,7 +575,7 @@ class MembresView(ft.Container):
         )
 
     def ouvrir_dialogue_renouvellement(self, e):
-        page_obj = self.page or getattr(self.app, "page", None)
+        page_obj = self.get_page()
         if not page_obj:
             return
 
@@ -623,7 +595,7 @@ class MembresView(ft.Container):
             saisons_disponibles = [f"{start_year - i}-{start_year - i + 1}" for i in range(1, 6)]
 
         noms_existants = [
-            f"{(m.get('nom') or '').strip().upper()} {(m.get('prenom') or '').strip().upper()}" 
+            f"{m.get('nom', '').strip().upper()} {m.get('prenom', '').strip().upper()}" 
             for m in getattr(self.app, "membres", [])
         ]
 
@@ -640,13 +612,13 @@ class MembresView(ft.Container):
 
             if anciens:
                 for m in anciens:
-                    cle = f"{(m.get('nom') or '').strip().upper()} {(m.get('prenom') or '').strip().upper()}"
+                    cle = f"{m.get('nom', '').strip().upper()} {m.get('prenom', '').strip().upper()}"
                     if cle not in noms_existants:
                         membres_trouves_global[cle] = (m, s)
 
         options_membres = [ft.dropdown.Option("tous", "-- Tous les membres inscriptibles --")]
         for cle, (m_data, s_source) in membres_trouves_global.items():
-            nom_aff = f"{(m_data.get('nom') or '').upper()} {m_data.get('prenom') or ''}"
+            nom_aff = f"{m_data.get('nom', '').upper()} {m_data.get('prenom', '')}"
             options_membres.append(ft.dropdown.Option(cle, f"{nom_aff} (Ex: S{s_source})"))
 
         dropdown_membres = ft.Dropdown(
@@ -692,14 +664,14 @@ class MembresView(ft.Container):
                 if membre_choisi != "tous" and cle != membre_choisi:
                     continue
 
-                nom_affiche = f"{(m_data.get('nom') or '').upper()} {m_data.get('prenom') or ''}"
-                niveau = m_data.get('niveau_actuel') or 'Débutant'
+                nom_affiche = f"{m_data.get('nom', '').upper()} {m_data.get('prenom', '')}"
+                section = m_data.get('section', m_data.get('grade_actuel', 'Multi-sports'))
                 
                 if filtre_txt and filtre_txt not in nom_affiche.lower():
                     continue
 
                 cb = ft.Checkbox(
-                    label=f"{nom_affiche} ({niveau}) - Ex S{s_source}",
+                    label=f"{nom_affiche} ({section}) - Ex S{s_source}",
                     value=True
                 )
                 checkboxes_map[cb] = (m_data, s_source)
@@ -725,8 +697,9 @@ class MembresView(ft.Container):
                 if cb.value:
                     nouvelle_fiche = dict(m_data)
                     nouvelle_fiche["certificat_medical_valide"] = False
-                    nouvelle_fiche["licence_prise"] = False
-                    histo = nouvelle_fiche.get("historique_licences") or ""
+                    nouvelle_fiche["licence_validee"] = False
+                    nouvelle_fiche["licence_prise_ffk"] = False
+                    histo = nouvelle_fiche.get("historique_licences", "")
                     nouvelle_fiche["historique_licences"] = f"Renouvelé en {saison_actuelle} (Ex: {s_source})\n{histo}".strip()
                     
                     self.app.membres.append(nouvelle_fiche)
@@ -736,7 +709,7 @@ class MembresView(ft.Container):
                 if hasattr(self.app, "save_data"):
                     self.app.save_data()
                 self.recharger_donnees_actuelles()
-                self.afficher_message(f"🎉 {membres_ajoutes} membre(s) réinscrit(s) pour {saison_actuelle} !")
+                self.afficher_message(f"{membres_ajoutes} membre(s) réinscrit(s) pour {saison_actuelle} !")
             else:
                 self.afficher_message("Aucun membre sélectionné.")
 
@@ -778,6 +751,7 @@ class MembresView(ft.Container):
             ]
         )
 
+        actualiser_liste_dialogue()
         if hasattr(page_obj, "open"):
             page_obj.open(dialog_renouvellement)
         else:
@@ -786,18 +760,18 @@ class MembresView(ft.Container):
             dialog_renouvellement.open = True
             page_obj.update()
 
-        actualiser_liste_dialogue()
-
-    def modifier_statut_direct(self, e, index):
-        self.app.membres[index]["licence_prise"] = e.control.value
+    def modifier_statut_licence_direct(self, e, index):
+        statut = e.control.value
+        self.app.membres[index]["licence_validee"] = statut
+        self.app.membres[index]["licence_prise_ffk"] = statut
         if hasattr(self.app, "save_data"):
             self.app.save_data()
 
-    def load_membres_table(self, filtre_texte="", filtre_cotis="Tous"):
+    def load_membres_table(self, filtre_texte="", filtre_cotis="Tous", filtre_licence="Tous"):
         self.table_membres.rows.clear()
         
         for index, m in enumerate(getattr(self.app, "membres", [])):
-            nom_complet = f"{(m.get('nom') or '').upper()} {m.get('prenom') or ''}"
+            nom_complet = f"{m.get('nom', '').upper()} {m.get('prenom', '')}"
             
             if filtre_texte and filtre_texte.lower() not in nom_complet.lower():
                 continue
@@ -809,12 +783,18 @@ class MembresView(ft.Container):
             elif filtre_cotis == "RestantDu" and bilan["is_solde"]:
                 continue
 
+            is_licence_validee = bool(m.get("licence_validee", m.get("licence_prise_ffk", False)))
+            if filtre_licence == "Validee" and not is_licence_validee:
+                continue
+            elif filtre_licence == "NonValidee" and is_licence_validee:
+                continue
+
             icon_med = ft.Icon(get_icon_safe("CHECK_CIRCLE"), color="green400", size=16) if m.get("certificat_medical_valide") else ft.Icon(get_icon_safe("DANGEROUS"), color="red400", size=16)
             
             cb_licence = ft.Checkbox(
                 label="Licence",
-                value=m.get("licence_prise", False),
-                on_change=lambda e, idx=index: self.modifier_statut_direct(e, idx)
+                value=is_licence_validee,
+                on_change=lambda e, idx=index: self.modifier_statut_licence_direct(e, idx)
             )
 
             statut_sante = ft.Row([
@@ -827,7 +807,8 @@ class MembresView(ft.Container):
                 ft.Text(f"Réglé: {bilan['total_paye']:.2f} € / Dû: {bilan['tarif_du']:.2f} €", size=10, color="grey400")
             ], spacing=2)
 
-            avatar_char = (m.get("nom") or "X")[0].upper()
+            section_nom = m.get('section', m.get('grade_actuel', 'Multi-sports'))
+            lic_num = m.get('licence_num', m.get('licence_ffk', 'N/A'))
 
             self.table_membres.rows.append(
                 ft.DataRow(
@@ -835,13 +816,13 @@ class MembresView(ft.Container):
                         ft.DataCell(ft.Row([
                             ft.CircleAvatar(
                                 foreground_image_url=m.get("photo") if m.get("photo") else None,
-                                content=ft.Text(avatar_char) if not m.get("photo") else None,
+                                content=ft.Text(m.get("nom", "X")[0].upper()) if not m.get("photo") else None,
                                 radius=14
                             ),
                             ft.Text(nom_complet, weight="bold", size=12)
                         ], spacing=8)),
-                        ft.DataCell(ft.Text(f"{m.get('niveau_actuel') or 'Débutant'}\n({m.get('licence') or 'N/A'})", size=11)),
-                        ft.DataCell(ft.Text(f"{m.get('telephone') or 'N/A'}\n{m.get('email') or 'N/A'}", size=11)),
+                        ft.DataCell(ft.Text(f"{section_nom}\n({lic_num})", size=11)),
+                        ft.DataCell(ft.Text(f"{m.get('telephone', 'N/A')}\n{m.get('email', 'N/A')}", size=11)),
                         ft.DataCell(statut_sante),
                         ft.DataCell(widget_cotis),
                         ft.DataCell(ft.Row([
@@ -892,9 +873,9 @@ class MembresView(ft.Container):
             "accord_parental_soins": self.check_accord_soins.value,
             "allergies": self.input_allergies.value,
             "fiche_medecin": self.input_fiche_medecin.value,
-            "licence": self.input_licence.value,
-            "licence_prise": self.check_licence_prise.value,
-            "niveau_actuel": self.dropdown_niveau.value if self.dropdown_niveau.value else "Débutant",
+            "licence_num": self.input_licence.value,
+            "licence_validee": self.check_licence_validee.value,
+            "section": self.dropdown_section.value if self.dropdown_section.value else "Multi-sports",
             "historique_licences": self.input_historique_licences.value,
             "tarif_custom": self.input_tarif_custom.value.strip() if self.input_tarif_custom.value else ""
         }
@@ -910,29 +891,31 @@ class MembresView(ft.Container):
         self.afficher_ecran_liste()
 
     def supprimer_fiche(self, index):
-        page_obj = self.page or getattr(self.app, "page", None)
+        page_obj = self.get_page()
         
         def confirmer_suppression(e):
             self.app.membres.pop(index)
             if hasattr(self.app, "save_data"):
                 self.app.save_data()
-            
             if hasattr(page_obj, "close"):
                 page_obj.close(dialog_confirmation)
             else:
                 dialog_confirmation.open = False
-                if page_obj:
-                    page_obj.update()
+                page_obj.update()
             self.afficher_ecran_liste()
 
-        nom_aff = (self.app.membres[index].get('nom') or '').upper()
-        prenom_aff = self.app.membres[index].get('prenom') or ''
+        def annuler_suppression(e):
+            if hasattr(page_obj, "close"):
+                page_obj.close(dialog_confirmation)
+            else:
+                dialog_confirmation.open = False
+                page_obj.update()
 
         dialog_confirmation = ft.AlertDialog(
-            title=ft.Text("⚠️ Suppression", size=16),
-            content=ft.Text(f"Supprimer la fiche de {nom_aff} {prenom_aff} ?", size=13),
+            title=ft.Text("Suppression", size=16),
+            content=ft.Text(f"Supprimer la fiche de {self.app.membres[index].get('nom').upper()} {self.app.membres[index].get('prenom')} ?", size=13),
             actions=[
-                ft.TextButton("Non", on_click=lambda e: page_obj.close(dialog_confirmation) if hasattr(page_obj, "close") else setattr(dialog_confirmation, "open", False)),
+                ft.TextButton("Non", on_click=annuler_suppression),
                 ft.ElevatedButton("Oui, supprimer", bgcolor="red700", color="white", on_click=confirmer_suppression)
             ]
         )
@@ -946,10 +929,9 @@ class MembresView(ft.Container):
                 page_obj.update()
 
     def ouvrir_boite_details(self, index):
-        page_obj = self.page or getattr(self.app, "page", None)
+        page_obj = self.get_page()
         m = self.app.membres[index]
-        
-        adresse = f"{m.get('adresse_rue') or ''}\n{m.get('adresse_cp') or ''} {m.get('adresse_ville') or ''}".strip()
+        adresse = f"{m.get('adresse_rue', '')}\n{m.get('adresse_cp', '')} {m.get('adresse_ville', '')}".strip()
         if not adresse.replace("\n", ""):
             adresse = "Non renseignée"
 
@@ -968,7 +950,7 @@ class MembresView(ft.Container):
             )
         else:
             for r in reglements:
-                mode = r.get("mode") or "Règlement"
+                mode = r.get("mode", "Règlement")
                 details_mode = []
                 if r.get("num_cheque"):
                     details_mode.append(f"Chèque N°{r.get('num_cheque')}")
@@ -978,7 +960,7 @@ class MembresView(ft.Container):
                     details_mode.append(f"Pass'Sport: {r.get('num_pass_sport')}")
 
                 str_details = (" - " + ", ".join(details_mode)) if details_mode else ""
-                statut = r.get("statut") or "Validé"
+                statut = r.get("statut", "Validé")
                 
                 if statut == "Encaissé / Validé":
                     badge_statut_color = "green400"
@@ -999,7 +981,7 @@ class MembresView(ft.Container):
                             ft.Row([
                                 ft.Row([
                                     ft.Icon(get_icon_safe("RECEIPT"), size=16, color="blue300"),
-                                    ft.Text(f"Date : {r.get('date') or 'N/A'}", size=12, weight="bold"),
+                                    ft.Text(f"Date : {r.get('date', 'N/A')}", size=12, weight="bold"),
                                 ]),
                                 ft.Text(f"{montant_val:.2f} €", weight="bold", color="green300", size=13)
                             ], alignment="spaceBetween"),
@@ -1013,20 +995,27 @@ class MembresView(ft.Container):
                     )
                 )
 
-        nom_aff = (m.get('nom') or '').upper()
-        prenom_aff = m.get('prenom') or ''
-        avatar_char = (m.get('nom') or 'X')[0].upper()
+        def fermer_details(e):
+            if hasattr(page_obj, "close"):
+                page_obj.close(dialog_details)
+            else:
+                dialog_details.open = False
+                page_obj.update()
+
+        section_val = m.get("section", m.get("grade_actuel", "Multi-sports"))
+        num_lic_val = m.get("licence_num", m.get("licence_ffk", "N/A"))
+        lic_ok = m.get("licence_validee", m.get("licence_prise_ffk", False))
 
         dialog_details = ft.AlertDialog(
             title=ft.Row([
                 ft.CircleAvatar(
                     foreground_image_url=m.get("photo") if m.get("photo") else None,
-                    content=ft.Text(avatar_char) if not m.get("photo") else None,
+                    content=ft.Text(m.get("nom", "X")[0].upper()) if not m.get("photo") else None,
                     radius=22
                 ),
                 ft.Column([
-                    ft.Text(f"{nom_aff} {prenom_aff}", size=16, weight="bold"),
-                    ft.Text(f"Sexe: {sexe_libelle} | Né(e): {m.get('date_naissance') or 'N/A'}", size=11, color="grey400"),
+                    ft.Text(f"{m.get('nom','').upper()} {m.get('prenom','')}", size=16, weight="bold"),
+                    ft.Text(f"Sexe: {sexe_libelle} | Né(e): {m.get('date_naissance','N/A')}", size=11, color="grey400"),
                 ], spacing=2, expand=True)
             ], spacing=10),
             
@@ -1072,22 +1061,22 @@ class MembresView(ft.Container):
                             content=ft.Column([
                                 ft.Text("Informations Personnelles", weight="bold", size=13, color="blue200"),
                                 ft.Divider(height=5, color="grey800"),
-                                self.creer_ligne_detail("📞 Tél :", m.get("telephone") or "N/A"),
-                                self.creer_ligne_detail("📧 Email :", m.get("email") or "N/A"),
-                                self.creer_ligne_detail("📍 Adresse :", adresse, multiline=True),
-                                self.creer_ligne_detail("👤 Responsable :", m.get("responsable_legal") or "Majeur"),
-                                self.creer_ligne_detail("📜 Certif médical :", "✅ OK" if m.get("certificat_medical_valide") else "❌ MANQUANT", color_val="green400" if m.get("certificat_medical_valide") else "red400"),
-                                self.creer_ligne_detail("🩺 Urgences :", "Autorisé" if m.get("accord_parental_soins") else "Non signé", color_val="blue300" if m.get("accord_parental_soins") else "orange300"),
-                                self.creer_ligne_detail("⚠️ Allergies :", m.get("allergies") or "RAS", color_val="red300" if m.get("allergies") else "white"),
-                                self.creer_ligne_detail(" Level / Grade :", m.get("niveau_actuel") or "Débutant"),
-                                self.creer_ligne_detail("🆔 Licence :", f"{m.get('licence') or 'N/A'} ({'✅ Prise' if m.get('licence_prise') else '❌ Non prise'})"),
+                                self.creer_ligne_detail("Tél :", m.get("telephone", "N/A")),
+                                self.creer_ligne_detail("Email :", m.get("email", "N/A")),
+                                self.creer_ligne_detail("Adresse :", adresse, multiline=True),
+                                self.creer_ligne_detail("Responsable :", m.get("responsable_legal", "Majeur")),
+                                self.creer_ligne_detail("Certif médical :", "OK" if m.get("certificat_medical_valide") else "MANQUANT", color_val="green400" if m.get("certificat_medical_valide") else "red400"),
+                                self.creer_ligne_detail("Urgences :", "Autorisé" if m.get("accord_parental_soins") else "Non signé", color_val="blue300" if m.get("accord_parental_soins") else "orange300"),
+                                self.creer_ligne_detail("Allergies :", m.get("allergies", "RAS"), color_val="red300" if m.get("allergies") else "white"),
+                                self.creer_ligne_detail("Section :", section_val),
+                                self.creer_ligne_detail("Licence :", f"{num_lic_val} ({'Validée' if lic_ok else 'Non validée'})"),
                             ], spacing=6)
                         )
                     ]
                 )
             ),
             actions=[
-                ft.TextButton("Fermer", on_click=lambda e: page_obj.close(dialog_details) if hasattr(page_obj, "close") else setattr(dialog_details, "open", False))
+                ft.TextButton("Fermer", on_click=fermer_details)
             ]
         )
         if page_obj:
@@ -1120,38 +1109,33 @@ class MembresView(ft.Container):
     def filtrer_membres(self, e):
         txt = self.input_recherche.value or ""
         filtre_cotis = self.dropdown_filtre_cotis.value or "Tous"
-        self.load_membres_table(filtre_texte=txt, filtre_cotis=filtre_cotis)
+        filtre_licence = self.dropdown_filtre_licence.value or "Tous"
+        self.load_membres_table(filtre_texte=txt, filtre_cotis=filtre_cotis, filtre_licence=filtre_licence)
         if self.page:
             self.table_membres.update()
 
     def pre_remplir_formulaire(self, index):
         m = self.app.membres[index]
-        valeur_niveau = m.get("niveau_actuel") or "Débutant"
-        
-        self.input_nom.value = m.get("nom") or ""
-        self.input_prenom.value = m.get("prenom") or ""
-        self.dropdown_sexe.value = m.get("sexe") or "H"
-        self.input_date_naissance.value = m.get("date_naissance") or ""
-        self.input_photo.value = m.get("photo") or ""
-        self.input_email.value = m.get("email") or ""
-        self.input_telephone.value = m.get("telephone") or ""
-        self.input_rue.value = m.get("adresse_rue") or ""
-        self.input_cp.value = m.get("adresse_cp") or ""
-        self.input_ville.value = m.get("adresse_ville") or ""
-        self.input_responsable.value = m.get("responsable_legal") or ""
+        self.input_nom.value = m.get("nom", "")
+        self.input_prenom.value = m.get("prenom", "")
+        self.dropdown_sexe.value = m.get("sexe", "H")
+        self.input_date_naissance.value = m.get("date_naissance", "")
+        self.input_photo.value = m.get("photo", "")
+        self.input_email.value = m.get("email", "")
+        self.input_telephone.value = m.get("telephone", "")
+        self.input_rue.value = m.get("adresse_rue", "")
+        self.input_cp.value = m.get("adresse_cp", "")
+        self.input_ville.value = m.get("adresse_ville", "")
+        self.input_responsable.value = m.get("responsable_legal", "")
         self.check_medical.value = m.get("certificat_medical_valide", False)
         self.check_accord_soins.value = m.get("accord_parental_soins", False)
-        self.input_allergies.value = m.get("allergies") or ""
-        self.input_fiche_medecin.value = m.get("fiche_medecin") or ""
-        self.input_licence.value = m.get("licence") or ""
-        self.check_licence_prise.value = m.get("licence_prise", False)
-        
-        # Mettre à jour les options avec la valeur du membre
-        self.dropdown_niveau.options = self.generer_options_niveaux(valeur_actuelle=valeur_niveau)
-        self.dropdown_niveau.value = valeur_niveau
-        
-        self.input_historique_licences.value = m.get("historique_licences") or ""
-        self.input_tarif_custom.value = str(m.get("tarif_custom") or "")
+        self.input_allergies.value = m.get("allergies", "")
+        self.input_fiche_medecin.value = m.get("fiche_medecin", "")
+        self.input_licence.value = m.get("licence_num", m.get("licence_ffk", ""))
+        self.check_licence_validee.value = m.get("licence_validee", m.get("licence_prise_ffk", False))
+        self.dropdown_section.value = m.get("section", m.get("grade_actuel", "Multi-sports"))
+        self.input_historique_licences.value = m.get("historique_licences", "")
+        self.input_tarif_custom.value = str(m.get("tarif_custom", ""))
 
     def vider_formulaire(self):
         self.input_nom.value = ""
@@ -1170,10 +1154,7 @@ class MembresView(ft.Container):
         self.input_allergies.value = ""
         self.input_fiche_medecin.value = ""
         self.input_licence.value = ""
-        self.check_licence_prise.value = False
-        
-        self.dropdown_niveau.options = self.generer_options_niveaux()
-        self.dropdown_niveau.value = "Débutant"
-        
+        self.check_licence_validee.value = False
+        self.dropdown_section.value = "Multi-sports"
         self.input_historique_licences.value = ""
         self.input_tarif_custom.value = ""
